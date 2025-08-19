@@ -317,73 +317,160 @@ function Select({ id, label, items, value, onChange }) {
   );
 }
 
+/** Clean, scrollable multi-select dropdown with checkboxes and search */
 function MultiSelectPopover({ label, items, values, onChange, idxMap }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const selectedCodes = new Set(values.map((v) => v.code));
 
-  const filtered = items.filter((i) => {
-    if (!query) return true;
-    const q = query.toLowerCase();
-    return i.code.toLowerCase().includes(q) || i.description.toLowerCase().includes(q);
-  });
+  const selected = new Set(values.map(v => v.code));
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter(i =>
+      i.code.toLowerCase().includes(q) ||
+      i.description.toLowerCase().includes(q)
+    );
+  }, [items, query]);
+
+  const applyFromSet = (set) => {
+    const next = items.filter(i => set.has(i.code));
+    onChange(sortCanonically(next, idxMap));
+  };
 
   const toggle = (code) => {
-    if (selectedCodes.has(code)) selectedCodes.delete(code);
-    else selectedCodes.add(code);
-    const next = items.filter((i) => selectedCodes.has(i.code));
-    onChange(sortCanonically(next, idxMap));
+    const next = new Set(selected);
+    next.has(code) ? next.delete(code) : next.add(code);
+    applyFromSet(next);
   };
 
-  const remove = (code) => {
-    const next = values.filter((v) => v.code !== code);
-    onChange(sortCanonically(next, idxMap));
+  const selectAllFiltered = () => {
+    const next = new Set(selected);
+    filtered.forEach(i => next.add(i.code));
+    applyFromSet(next);
   };
+
+  const clearAll = () => applyFromSet(new Set());
 
   return (
-    <div className="grid gap-2 w-full">
+    <div className="grid gap-2 w-full" style={{minWidth: 0}}>
       <Label>{label}</Label>
-      <div className="flex items-center gap-2">
-        <Button type="button" variant="outline" onClick={() => setOpen((o) => !o)}>
-          {open ? 'Close' : 'Add / Edit'}
+
+      {/* Trigger row */}
+      <div className="flex items-center gap-2" style={{minWidth: 0}}>
+        <Button type="button" variant="outline" onClick={() => setOpen(o => !o)}>
+          {open ? "Close" : `Add / Edit (${values.length})`}
         </Button>
         <Input
           placeholder="Search code or description…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          style={{flex: 1, minWidth: 0}}
         />
       </div>
 
+      {/* Dropdown panel */}
       {open && (
-        <div className="border rounded p-3 max-h-56 overflow-auto bg-white shadow-sm">
-          {filtered.map((i) => (
-            <label key={i.code} className="flex items-center gap-2 py-1 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={selectedCodes.has(i.code)}
-                onChange={() => toggle(i.code)}
-              />
-              <span className="text-sm">
-                <span className="font-mono mr-1">{i.code}</span>
-                – {i.description}
-              </span>
-            </label>
-          ))}
-          {filtered.length === 0 && (
-            <div className="text-sm text-slate-500">No matches.</div>
-          )}
+        <div
+          className="bg-white"
+          style={{
+            border: "1px solid #e2e8f0",
+            borderRadius: 10,
+            padding: 10,
+            maxHeight: 320,
+            overflowY: "auto",
+            boxShadow: "0 6px 24px rgba(15,23,42,.08)",
+          }}
+        >
+          {/* Actions bar */}
+          <div
+            className="flex items-center gap-2"
+            style={{
+              position: "sticky",
+              top: 0,
+              background: "white",
+              paddingBottom: 8,
+              marginBottom: 8,
+              borderBottom: "1px solid #e2e8f0",
+              zIndex: 1
+            }}
+          >
+            <Button type="button" variant="outline" onClick={selectAllFiltered}>
+              Select all ({filtered.length})
+            </Button>
+            <Button type="button" variant="outline" onClick={clearAll}>
+              Clear
+            </Button>
+            <div style={{marginLeft: "auto", fontSize: 12, color: "#64748b"}}>
+              Selected: {values.length}
+            </div>
+          </div>
+
+          {/* One option per line */}
+          <div>
+            {filtered.map((i) => {
+              const isChecked = selected.has(i.code);
+              return (
+                <label
+                  key={i.code}
+                  className="flex items-center"
+                  style={{
+                    gap: 10,
+                    padding: "8px 6px",
+                    borderRadius: 8,
+                    cursor: "pointer",
+                    userSelect: "none",
+                    background: isChecked ? "#f1f5f9" : "transparent"
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isChecked}
+                    onChange={() => toggle(i.code)}
+                  />
+                  <span className="text-sm" style={{whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"}}>
+                    <span className="font-mono" style={{marginRight: 6}}>{i.code}</span>
+                    — {i.description}
+                  </span>
+                </label>
+              );
+            })}
+
+            {filtered.length === 0 && (
+              <div className="text-sm" style={{color: "#64748b", padding: "6px 0"}}>
+                No matches.
+              </div>
+            )}
+          </div>
         </div>
       )}
 
-      <div className="flex flex-wrap gap-2">
-        {values.map((v) => (
-          <span key={v.code} className="inline-flex items-center gap-1 border rounded-full px-2 py-1 text-xs bg-slate-50">
+      {/* Compact chips of current selection */}
+      <div className="flex flex-wrap gap-2" style={{minHeight: 28}}>
+        {values.map(v => (
+          <span
+            key={v.code}
+            className="inline-flex items-center"
+            style={{
+              gap: 6,
+              border: "1px solid #e2e8f0",
+              borderRadius: 9999,
+              padding: "4px 8px",
+              fontSize: 12,
+              background: "#f8fafc"
+            }}
+            title={`${v.code} — ${v.description}`}
+          >
             <span className="font-mono">{v.code}</span>
-            <span>- {v.description}</span>
             <button
               type="button"
-              className="ml-1 inline-flex p-0.5 hover:text-red-600"
-              onClick={() => remove(v.code)}
+              onClick={() => {
+                const next = new Set(values.map(x => x.code));
+                next.delete(v.code);
+                applyFromSet(next);
+              }}
+              style={{lineHeight: 0}}
+              aria-label={`Remove ${v.code}`}
               title="Remove"
             >
               <X className="h-3 w-3" />
@@ -391,12 +478,16 @@ function MultiSelectPopover({ label, items, values, onChange, idxMap }) {
           </span>
         ))}
         {values.length === 0 && (
-          <span className="text-xs text-slate-500">None selected</span>
+          <span className="text-xs" style={{color: "#64748b"}}>None selected</span>
         )}
       </div>
     </div>
   );
 }
+
+// ------------------
+//  LINE EDITOR
+// ------------------
 
 function LineEditor({ line, onChange }) {
   const currentSizes = line.model ? SIZES_BY_MODEL[line.model.code] : [];
@@ -407,30 +498,47 @@ function LineEditor({ line, onChange }) {
       <CardHeader>
         <CardTitle>Build Figure String</CardTitle>
       </CardHeader>
-      <CardContent className="grid gap-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <CardContent className="grid gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
           <Select id="sector" label="Sector" items={SECTORS} value={line.sector} onChange={(v) => onChange({ ...line, sector: v })} />
           <Select id="model" label="Model" items={MODELS} value={line.model} onChange={(v) => onChange({ ...line, model: v, size: null })} />
           <Select id="size" label="Size" items={currentSizes} value={line.size} onChange={(v) => onChange({ ...line, size: v })} />
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
           <Select id="primary" label="Primary Feature" items={PRIMARY_FEATURES} value={line.primary} onChange={(v) => onChange({ ...line, primary: v })} />
-          <MultiSelectPopover label="Additional Features" items={ADDITIONAL_FEATURES} values={line.addFeatures || []} onChange={(list) => onChange({ ...line, addFeatures: list })} idxMap={FEATURES_IDX} />
+          <MultiSelectPopover
+            label="Additional Features"
+            items={ADDITIONAL_FEATURES}
+            values={line.addFeatures || []}
+            onChange={(next) => onChange({ ...line, addFeatures: next })}
+            idxMap={FEATURES_IDX}
+          />
           <Select id="pattern" label="Pattern" items={PATTERNS} value={line.pattern} onChange={(v) => onChange({ ...line, pattern: v })} />
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
           <Select id="material" label="Construction Material" items={MATERIALS} value={line.material} onChange={(v) => onChange({ ...line, material: v })} />
           <Select id="end" label="End Connection" items={ENDS} value={line.end} onChange={(v) => onChange({ ...line, end: v })} />
           <Select id="coating" label="Coating" items={COATINGS} value={line.coating} onChange={(v) => onChange({ ...line, coating: v })} />
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
           <Select id="mainValvePos" label="Main Valve Position" items={SOLENOID_VOLTAGE} value={line.mainValvePos} onChange={(v) => onChange({ ...line, mainValvePos: v })} />
           <Select id="tubing" label="Tubing & Fittings" items={TUBING} value={line.tubing} onChange={(v) => onChange({ ...line, tubing: v })} />
         </div>
-        <MultiSelectPopover label="Additional Attributes" items={ADDITIONAL_ATTRIBUTES} values={line.addAttrs || []} onChange={(list) => onChange({ ...line, addAttrs: list })} idxMap={ATTRS_IDX} />
+
+        <MultiSelectPopover
+          label="Additional Attributes"
+          items={ADDITIONAL_ATTRIBUTES}
+          values={line.addAttrs || []}
+          onChange={(next) => onChange({ ...line, addAttrs: next })}
+          idxMap={ATTRS_IDX}
+        />
+
         <div className="grid gap-2">
           <Label>Hydraulic Setpoints</Label>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
             <div className="flex items-end gap-2">
               <div className="flex-1">
                 <Label htmlFor="flow">Flow</Label>
@@ -443,6 +551,7 @@ function LineEditor({ line, onChange }) {
                 </select>
               </div>
             </div>
+
             <div className="flex items-end gap-2">
               <div className="flex-1">
                 <Label htmlFor="pUp">Upstream Pressure</Label>
@@ -455,6 +564,7 @@ function LineEditor({ line, onChange }) {
                 </select>
               </div>
             </div>
+
             <div className="flex items-end gap-2">
               <div className="flex-1">
                 <Label htmlFor="pDown">Downstream Pressure</Label>
@@ -470,10 +580,12 @@ function LineEditor({ line, onChange }) {
           </div>
           {invalidPress && (<div className="text-xs text-red-600">Downstream pressure should be ≤ Upstream pressure.</div>)}
         </div>
+
         <div className="grid gap-2 w-full max-w-xs">
           <Label htmlFor="qty">Quantity</Label>
           <Input id="qty" type="number" min={1} step={1} value={line.qty ?? 1} onChange={(e) => { const v = parseInt(e.target.value || "1", 10); onChange({ ...line, qty: isNaN(v) || v < 1 ? 1 : v }); }} />
         </div>
+
         <div className="rounded border p-2 bg-slate-50 text-sm">
           <Info className="inline h-4 w-4 mr-2" />
           {buildFigureString(line) || "(incomplete)"}
@@ -484,6 +596,10 @@ function LineEditor({ line, onChange }) {
     </Card>
   );
 }
+
+// ------------------
+//  APP
+// ------------------
 
 function defaultLine() {
   return {
@@ -517,11 +633,13 @@ function mailtoLink({ projectName, rsm, customer, saved, notes }) {
   const bidDateText = formatMDY(customer.bidDate);
   const subjectBase = `Engineering Review Request: ${rsmLast}${rsmLast ? ", " : ""}${projectName || "Project"}`;
   const subject = bidDateText ? `${subjectBase} – Bid Date ${bidDateText}` : subjectBase;
+
   const selectionLines = saved.flatMap((ln, i) => {
     const f = buildFigureString(ln);
     const s = summarizeSetpoints(ln);
     return [`  ${i + 1}. ${f}`, s ? `     - ${s}` : null, `     - Qty: ${ln.qty ?? 1}`].filter(Boolean);
   });
+
   const bodyLines = [
     `Project: ${projectName || "(not provided)"}`,
     `RSM: ${rsm?.label || "(not selected)"}`,
