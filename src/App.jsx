@@ -441,6 +441,7 @@ function MultiSelectSimple({ label, items, values, onChange, idxMap }) {
     applyFromSet(next);
   };
 
+  // Close on outside click
   useEffect(() => {
     function onDocClick(e) {
       if (!anchorEl) return;
@@ -450,30 +451,52 @@ function MultiSelectSimple({ label, items, values, onChange, idxMap }) {
     return () => document.removeEventListener('mousedown', onDocClick);
   }, [open, anchorEl]);
 
-  const displayText = values.length === 0
-    ? 'None selected'
-    : values.map(v => v.code).join(', ');
+  const displayText = values.length === 0 ? 'None selected' : values.map(v => v.code).join(', ');
 
   return (
-    <div className="grid gap-2 w-full" ref={setAnchorEl}>
+    <div ref={setAnchorEl} style={{ display: 'grid', gap: 8, width: '100%', position: 'relative' }}>
       <Label>{label}</Label>
 
-      {/* Trigger styled like a select */}
+      {/* Trigger styled like a native select, no Tailwind dependency */}
       <button
         type="button"
-        className="w-full text-left border rounded px-3 py-2 bg-white flex items-center justify-between"
         onClick={() => setOpen(o => !o)}
         aria-haspopup="listbox"
         aria-expanded={open}
+        style={{
+          width: '100%',
+          textAlign: 'left',
+          border: '1px solid #e2e8f0',
+          borderRadius: 6,
+          padding: '8px 12px',
+          background: '#fff',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          cursor: 'pointer'
+        }}
       >
-        <span className="truncate">{displayText}</span>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayText}</span>
         <svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"><path d="M5 7l5 5 5-5" fill="none" stroke="currentColor" strokeWidth="1.5"/></svg>
       </button>
 
       {open && (
         <div
           role="listbox"
-          className="bg-white mt-1 border border-slate-200 rounded-md shadow-lg max-h-72 overflow-auto"
+          style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            right: 0,
+            marginTop: 4,
+            background: '#fff',
+            border: '1px solid #e2e8f0',
+            borderRadius: 8,
+            boxShadow: '0 6px 24px rgba(15,23,42,.08)',
+            maxHeight: 320,
+            overflow: 'auto',
+            zIndex: 1000
+          }}
         >
           {sortedItems.map((i) => {
             const isChecked = selected.has(i.code);
@@ -484,20 +507,27 @@ function MultiSelectSimple({ label, items, values, onChange, idxMap }) {
                 role="option"
                 aria-selected={isChecked}
                 onClick={() => toggle(i.code)}
-                className={cx(
-                  'w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-slate-50',
-                  isChecked && 'bg-slate-100'
-                )}
                 title={`${i.code} — ${i.description}`}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 12px',
+                  fontSize: 14,
+                  background: isChecked ? '#f1f5f9' : '#fff',
+                  border: 'none',
+                  cursor: 'pointer'
+                }}
               >
                 <input type="checkbox" readOnly checked={isChecked} />
-                <span className="font-mono">{i.code}</span>
-                <span className="truncate">— {i.description}</span>
+                <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace' }}>{i.code}</span>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>— {i.description}</span>
               </button>
             );
           })}
           {sortedItems.length === 0 && (
-            <div className="px-3 py-2 text-sm text-slate-500">No options</div>
+            <div style={{ padding: '8px 12px', fontSize: 14, color: '#64748b' }}>No options</div>
           )}
         </div>
       )}
