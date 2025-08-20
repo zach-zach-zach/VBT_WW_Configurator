@@ -1,12 +1,114 @@
 // 'use client';
 
-import React, { useMemo, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card.jsx";
-import { Button } from "./components/ui/button.jsx";
-import { Input } from "./components/ui/input.jsx";
-import { Textarea } from "./components/ui/textarea.jsx";
-import { Label } from "./components/ui/label.jsx";
+import React, { useMemo, useState, useEffect } from "react";
 import { Plus, Send, Trash2, Info, X } from "lucide-react";
+
+/**
+ * Inline minimal UI primitives so we don't depend on missing
+ * ./components/ui/* files. These mimic the styles/props used by the app
+ * (Card, Button, Input, Textarea, Label).
+ */
+
+// ------------------
+//  LIGHTWEIGHT UI PRIMITIVES (no external file imports)
+// ------------------
+function cx(...parts) {
+  return parts.filter(Boolean).join(" ");
+}
+
+function Card({ className = "", children, ...props }) {
+  return (
+    <div className={cx("rounded-xl border border-slate-200", className)} {...props}>
+      {children}
+    </div>
+  );
+}
+function CardHeader({ className = "", children, ...props }) {
+  return (
+    <div className={cx("p-4 border-b border-slate-100", className)} {...props}>
+      {children}
+    </div>
+  );
+}
+function CardTitle({ className = "", children, ...props }) {
+  return (
+    <h2 className={cx("text-lg font-semibold", className)} {...props}>
+      {children}
+    </h2>
+  );
+}
+function CardContent({ className = "", children, ...props }) {
+  return (
+    <div className={cx("p-4", className)} {...props}>
+      {children}
+    </div>
+  );
+}
+
+function Button({
+  children,
+  variant = "default",
+  size = "default",
+  asChild = false,
+  className = "",
+  ...props
+}) {
+  const base = "inline-flex items-center justify-center whitespace-nowrap rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-slate-400 disabled:opacity-50 disabled:pointer-events-none";
+  const variants = {
+    default: "bg-slate-900 text-white hover:bg-slate-800",
+    outline: "border border-slate-300 text-slate-900 bg-white hover:bg-slate-50",
+    ghost: "text-slate-700 hover:bg-slate-100",
+  };
+  const sizes = {
+    default: "h-9 px-4 py-2 text-sm",
+    icon: "h-8 w-8 p-0",
+  };
+  const cls = cx(base, variants[variant] || variants.default, sizes[size] || sizes.default, className);
+
+  if (asChild && React.isValidElement(children)) {
+    return React.cloneElement(children, {
+      className: cx(children.props.className, cls),
+      ...props,
+    });
+  }
+  return (
+    <button className={cls} {...props}>
+      {children}
+    </button>
+  );
+}
+
+function Input({ className = "", ...props }) {
+  return (
+    <input
+      className={cx(
+        "w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-400",
+        className
+      )}
+      {...props}
+    />
+  );
+}
+
+function Textarea({ className = "", ...props }) {
+  return (
+    <textarea
+      className={cx(
+        "w-full min-h-[96px] rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-400",
+        className
+      )}
+      {...props}
+    />
+  );
+}
+
+function Label({ className = "", children, ...props }) {
+  return (
+    <label className={cx("text-sm font-medium text-slate-700", className)} {...props}>
+      {children}
+    </label>
+  );
+}
 
 // ------------------
 //  ORDERING-GUIDE DATA
@@ -317,170 +419,88 @@ function Select({ id, label, items, value, onChange }) {
   );
 }
 
-/** Clean, scrollable multi-select dropdown with checkboxes and search */
-function MultiSelectPopover({ label, items, values, onChange, idxMap }) {
+/** Simple multi-select dropdown (no Add / Close / action bar).
+ *  - Click the control to open/close
+ *  - Click an option to toggle select/deselect
+ *  - Click outside to close
+ */
+function MultiSelectSimple({ label, items, values, onChange, idxMap }) {
   const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
+  const [anchorEl, setAnchorEl] = useState(null);
 
-  const selected = new Set(values.map(v => v.code));
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter(i =>
-      i.code.toLowerCase().includes(q) ||
-      i.description.toLowerCase().includes(q)
-    );
-  }, [items, query]);
+  const selected = useMemo(() => new Set(values.map(v => v.code)), [values]);
+  const sortedItems = useMemo(() => items.slice(), [items]);
 
   const applyFromSet = (set) => {
     const next = items.filter(i => set.has(i.code));
     onChange(sortCanonically(next, idxMap));
   };
-
   const toggle = (code) => {
     const next = new Set(selected);
     next.has(code) ? next.delete(code) : next.add(code);
     applyFromSet(next);
   };
 
-  const selectAllFiltered = () => {
-    const next = new Set(selected);
-    filtered.forEach(i => next.add(i.code));
-    applyFromSet(next);
-  };
+  useEffect(() => {
+    function onDocClick(e) {
+      if (!anchorEl) return;
+      if (!anchorEl.contains(e.target)) setOpen(false);
+    }
+    if (open) document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [open, anchorEl]);
 
-  const clearAll = () => applyFromSet(new Set());
+  const displayText = values.length === 0
+    ? 'None selected'
+    : values.map(v => v.code).join(', ');
 
   return (
-    <div className="grid gap-2 w-full" style={{minWidth: 0}}>
+    <div className="grid gap-2 w-full" ref={setAnchorEl}>
       <Label>{label}</Label>
 
-      {/* Trigger row */}
-      <div className="flex items-center gap-2" style={{minWidth: 0}}>
-        <Button type="button" variant="outline" onClick={() => setOpen(o => !o)}>
-          {open ? "Close" : `Add / Edit (${values.length})`}
-        </Button>
-        <Input
-          placeholder="Search code or description…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          style={{flex: 1, minWidth: 0}}
-        />
-      </div>
+      {/* Trigger styled like a select */}
+      <button
+        type="button"
+        className="w-full text-left border rounded px-3 py-2 bg-white flex items-center justify-between"
+        onClick={() => setOpen(o => !o)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        <span className="truncate">{displayText}</span>
+        <svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"><path d="M5 7l5 5 5-5" fill="none" stroke="currentColor" strokeWidth="1.5"/></svg>
+      </button>
 
-      {/* Dropdown panel */}
       {open && (
         <div
-          className="bg-white"
-          style={{
-            border: "1px solid #e2e8f0",
-            borderRadius: 10,
-            padding: 10,
-            maxHeight: 320,
-            overflowY: "auto",
-            boxShadow: "0 6px 24px rgba(15,23,42,.08)",
-          }}
+          role="listbox"
+          className="bg-white mt-1 border border-slate-200 rounded-md shadow-lg max-h-72 overflow-auto"
         >
-          {/* Actions bar */}
-          <div
-            className="flex items-center gap-2"
-            style={{
-              position: "sticky",
-              top: 0,
-              background: "white",
-              paddingBottom: 8,
-              marginBottom: 8,
-              borderBottom: "1px solid #e2e8f0",
-              zIndex: 1
-            }}
-          >
-            <Button type="button" variant="outline" onClick={selectAllFiltered}>
-              Select all ({filtered.length})
-            </Button>
-            <Button type="button" variant="outline" onClick={clearAll}>
-              Clear
-            </Button>
-            <div style={{marginLeft: "auto", fontSize: 12, color: "#64748b"}}>
-              Selected: {values.length}
-            </div>
-          </div>
-
-          {/* One option per line */}
-          <div>
-            {filtered.map((i) => {
-              const isChecked = selected.has(i.code);
-              return (
-                <label
-                  key={i.code}
-                  className="flex items-center"
-                  style={{
-                    gap: 10,
-                    padding: "8px 6px",
-                    borderRadius: 8,
-                    cursor: "pointer",
-                    userSelect: "none",
-                    background: isChecked ? "#f1f5f9" : "transparent"
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={isChecked}
-                    onChange={() => toggle(i.code)}
-                  />
-                  <span className="text-sm" style={{whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"}}>
-                    <span className="font-mono" style={{marginRight: 6}}>{i.code}</span>
-                    — {i.description}
-                  </span>
-                </label>
-              );
-            })}
-
-            {filtered.length === 0 && (
-              <div className="text-sm" style={{color: "#64748b", padding: "6px 0"}}>
-                No matches.
-              </div>
-            )}
-          </div>
+          {sortedItems.map((i) => {
+            const isChecked = selected.has(i.code);
+            return (
+              <button
+                key={i.code}
+                type="button"
+                role="option"
+                aria-selected={isChecked}
+                onClick={() => toggle(i.code)}
+                className={cx(
+                  'w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-slate-50',
+                  isChecked && 'bg-slate-100'
+                )}
+                title={`${i.code} — ${i.description}`}
+              >
+                <input type="checkbox" readOnly checked={isChecked} />
+                <span className="font-mono">{i.code}</span>
+                <span className="truncate">— {i.description}</span>
+              </button>
+            );
+          })}
+          {sortedItems.length === 0 && (
+            <div className="px-3 py-2 text-sm text-slate-500">No options</div>
+          )}
         </div>
       )}
-
-      {/* Compact chips of current selection */}
-      <div className="flex flex-wrap gap-2" style={{minHeight: 28}}>
-        {values.map(v => (
-          <span
-            key={v.code}
-            className="inline-flex items-center"
-            style={{
-              gap: 6,
-              border: "1px solid #e2e8f0",
-              borderRadius: 9999,
-              padding: "4px 8px",
-              fontSize: 12,
-              background: "#f8fafc"
-            }}
-            title={`${v.code} — ${v.description}`}
-          >
-            <span className="font-mono">{v.code}</span>
-            <button
-              type="button"
-              onClick={() => {
-                const next = new Set(values.map(x => x.code));
-                next.delete(v.code);
-                applyFromSet(next);
-              }}
-              style={{lineHeight: 0}}
-              aria-label={`Remove ${v.code}`}
-              title="Remove"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          </span>
-        ))}
-        {values.length === 0 && (
-          <span className="text-xs" style={{color: "#64748b"}}>None selected</span>
-        )}
-      </div>
     </div>
   );
 }
@@ -507,7 +527,7 @@ function LineEditor({ line, onChange }) {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
           <Select id="primary" label="Primary Feature" items={PRIMARY_FEATURES} value={line.primary} onChange={(v) => onChange({ ...line, primary: v })} />
-          <MultiSelectPopover
+          <MultiSelectSimple
             label="Additional Features"
             items={ADDITIONAL_FEATURES}
             values={line.addFeatures || []}
@@ -528,7 +548,7 @@ function LineEditor({ line, onChange }) {
           <Select id="tubing" label="Tubing & Fittings" items={TUBING} value={line.tubing} onChange={(v) => onChange({ ...line, tubing: v })} />
         </div>
 
-        <MultiSelectPopover
+        <MultiSelectSimple
           label="Additional Attributes"
           items={ADDITIONAL_ATTRIBUTES}
           values={line.addAttrs || []}
@@ -625,22 +645,15 @@ function defaultLine() {
   };
 }
 
-function mailtoLink({ projectName, rsm, customer, saved, notes }) {
-  const to = "ryan.cronin@vbtech.com";
-  const ccList = ["jeanne.barkley@vbtech.com", rsm?.value].filter(Boolean).join(",");
-  const cc = ccList ? `&cc=${encodeURIComponent(ccList)}` : "";
-  const rsmLast = rsm?.last || "";
+function formatBodyLines({ projectName, rsm, customer, saved, notes }) {
   const bidDateText = formatMDY(customer.bidDate);
-  const subjectBase = `Engineering Review Request: ${rsmLast}${rsmLast ? ", " : ""}${projectName || "Project"}`;
-  const subject = bidDateText ? `${subjectBase} – Bid Date ${bidDateText}` : subjectBase;
-
   const selectionLines = saved.flatMap((ln, i) => {
     const f = buildFigureString(ln);
     const s = summarizeSetpoints(ln);
     return [`  ${i + 1}. ${f}`, s ? `     - ${s}` : null, `     - Qty: ${ln.qty ?? 1}`].filter(Boolean);
   });
 
-  const bodyLines = [
+  return [
     `Project: ${projectName || "(not provided)"}`,
     `RSM: ${rsm?.label || "(not selected)"}`,
     "",
@@ -660,7 +673,74 @@ function mailtoLink({ projectName, rsm, customer, saved, notes }) {
     "",
     `Notes:\n${notes || ""}`,
   ];
+}
+
+function mailtoLink({ projectName, rsm, customer, saved, notes }) {
+  const to = "ryan.cronin@vbtech.com";
+  const ccList = ["jeanne.barkley@vbtech.com", rsm?.value].filter(Boolean).join(",");
+  const cc = ccList ? `&cc=${encodeURIComponent(ccList)}` : "";
+  const rsmLast = rsm?.last || "";
+  const bidDateText = formatMDY(customer.bidDate);
+  const subjectBase = `Engineering Review Request: ${rsmLast}${rsmLast ? ", " : ""}${projectName || "Project"}`;
+  const subject = bidDateText ? `${subjectBase} – Bid Date ${bidDateText}` : subjectBase;
+
+  const bodyLines = formatBodyLines({ projectName, rsm, customer, saved, notes });
   return `mailto:${to}?subject=${encodeURIComponent(subject)}${cc}&body=${encodeURIComponent(bodyLines.join("\n"))}`;
+}
+
+// ------------------
+//  LIGHTWEIGHT SELF-TESTS (run once in the browser console)
+// ------------------
+function runSelfTestsOnce() {
+  if (typeof window === "undefined") return;
+  if (window.__VALVE_CFG_TESTED__) return;
+  window.__VALVE_CFG_TESTED__ = true;
+
+  try {
+    // Test 1: pressuresInvalid
+    console.assert(pressuresInvalid({ pUp: 100, pDown: 120 }) === true, "pressuresInvalid should be true when downstream > upstream");
+    console.assert(pressuresInvalid({ pUp: 120, pDown: 80 }) === false, "pressuresInvalid should be false when downstream <= upstream");
+    console.assert(pressuresInvalid({ pUp: "", pDown: 80 }) === false, "pressuresInvalid should be false if any is NaN");
+
+    // Test 2: buildFigureString ordering
+    const line = {
+      sector: { code: "WW" },
+      size: { description: '6"' },
+      primary: { code: "720" },
+      model: { code: "EN" },
+      addFeatures: [{ code: "55" }, { code: "C1" }],
+      pattern: { code: "Y" },
+      material: { code: "C" },
+      end: { code: "A5" },
+      coating: { code: "EB" },
+      mainValvePos: { code: "5AC" },
+      tubing: { code: "NN" },
+      addAttrs: [{ code: "B" }, { code: "E1" }],
+    };
+    const fig = buildFigureString(line);
+    console.assert(fig === 'WW 6" 720 EN 55 C1 Y C A5 EB 5AC NN B E1', `Unexpected figure string: ${fig}`);
+
+    // Test 3: mailtoLink basic structure
+    const href = mailtoLink({ projectName: "TestProj", rsm: RSMS[0], customer: { bidDate: "2025-08-20", deliverBy: "2025-09-01" }, saved: [line], notes: "hello" });
+    console.assert(href.startsWith("mailto:"), "mailtoLink should start with mailto:");
+    console.assert(href.includes("subject=") && href.includes("body="), "mailtoLink should include subject and body params");
+
+    // Test 4: summarizeSetpoints
+    const s = summarizeSetpoints({ flow: 800, flowUnit: "gpm", pUp: 120, pUpUnit: "psi", pDown: 80, pDownUnit: "psi" });
+    console.assert(s === "Flow 800 gpm, Up 120 psi, Down 80 psi", `Unexpected setpoints: ${s}`);
+
+    // Test 5: fmt utility
+    console.assert(fmt({ code: "A", description: "Alpha" }) === "A - Alpha", "fmt should format code - description");
+    console.assert(fmt(null) === "", "fmt(null) should be empty string");
+
+    // Test 6: formatBodyLines minimal presence
+    const body = formatBodyLines({ projectName: "X", rsm: RSMS[0], customer: { bidDate: "2025-08-20", deliverBy: "2025-09-01" }, saved: [line], notes: "n" });
+    console.assert(Array.isArray(body) && body.some(l => l === "Selections:"), "Body should contain Selections header");
+
+    console.log("✔ Valve configurator self-tests passed");
+  } catch (err) {
+    console.error("Self-tests failed:", err);
+  }
 }
 
 export default function App() {
@@ -684,6 +764,10 @@ export default function App() {
 
   const [current, setCurrent] = useState(defaultLine());
   const [saved, setSaved] = useState([]);
+
+  useEffect(() => {
+    runSelfTestsOnce();
+  }, []);
 
   const addToSummary = () => {
     setSaved((s) => [...s, current]);
